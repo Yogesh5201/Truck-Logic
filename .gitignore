@@ -1,0 +1,18 @@
+# Root gitignore — see backend/.gitignore and frontend/.gitignore for details.
+.DS_Store
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+db.sqlite3
+backend/staticfiles/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Environment secrets (never commit real keys)
+.env
