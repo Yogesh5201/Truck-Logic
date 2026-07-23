@@ -18,4 +18,4 @@ frontend/dist/
 .env
 
 # Claude Code local settings (may contain machine-specific paths / secrets)
-.claude/
+
