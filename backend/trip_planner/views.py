@@ -3,7 +3,9 @@ HTTP views for the trip planner API.
 
 The single endpoint validates inputs, invokes the stateless simulation
 service, and returns the structured JSON payload. All heavy computation lives
-in ``services/`` — the view stays thin.
+in ``services/`` — the view stays thin. Routing-provider failures are surfaced
+as typed errors carrying a friendly message, an HTTP status, and a machine
+code the frontend can branch on.
 """
 
 from rest_framework import status
@@ -12,7 +14,7 @@ from rest_framework.response import Response
 
 from .serializers import SimulateTripSerializer
 from .services import simulator
-from .services.ors_client import ORSError
+from .services.graphhopper_client import GraphHopperError
 
 
 @api_view(["GET"])
@@ -36,10 +38,11 @@ def simulate_trip(request):
             dropoff=data["dropoff_location"],
             cycle_used=data["current_cycle_used"],
         )
-    except ORSError as exc:
-        # Upstream routing/geocoding failure -> 502 Bad Gateway.
+    except GraphHopperError as exc:
+        # Typed routing failures carry their own HTTP status + machine code.
         return Response(
-            {"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY
+            {"detail": str(exc), "code": exc.code},
+            status=exc.http_status,
         )
 
     return Response(result, status=status.HTTP_200_OK)

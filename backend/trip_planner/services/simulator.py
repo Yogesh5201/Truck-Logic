@@ -2,7 +2,7 @@
 Top-level trip simulation orchestrator.
 
 Ties together:
-  * ORS geocoding + HGV routing (two legs)
+  * GraphHopper geocoding + road routing (two legs)
   * the HOS temporal projection engine
   * Douglas-Peucker route simplification (Shapely)
   * reverse-geocoded ELD remarks
@@ -18,7 +18,7 @@ from typing import List
 from shapely.geometry import LineString
 
 from . import geometry as geo
-from . import ors_client
+from . import graphhopper_client as routing
 from .. import constants as C
 from .hos_engine import DutyEvent, HOSSimulator
 
@@ -39,13 +39,13 @@ def simulate_trip(
 ) -> dict:
     """Run a full simulation from three address strings + cycle hours."""
     # 1) Geocode the three waypoints -> (lon, lat).
-    current_c = ors_client.geocode(current)
-    pickup_c = ors_client.geocode(pickup)
-    dropoff_c = ors_client.geocode(dropoff)
+    current_c = routing.geocode(current)
+    pickup_c = routing.geocode(pickup)
+    dropoff_c = routing.geocode(dropoff)
 
     # 2) Route the two legs (deadhead + loaded).
-    leg1 = ors_client.route_leg(current_c, pickup_c)
-    leg2 = ors_client.route_leg(pickup_c, dropoff_c)
+    leg1 = routing.route_leg(current_c, pickup_c)
+    leg2 = routing.route_leg(pickup_c, dropoff_c)
 
     # 3) Build the combined track and run the HOS engine.
     track = geo.build_track_from_legs(leg1, leg2)
@@ -102,7 +102,7 @@ def _build_timeline(events: List[DutyEvent]) -> List[dict]:
         d = ev.to_dict()
         if ev.event_type in _MARKER_EVENTS or ev.event_type == C.EVENT_DRIVE:
             lon, lat = ev.start_coord
-            d["location_label"] = ors_client.reverse_geocode(
+            d["location_label"] = routing.reverse_geocode(
                 round(lon, 3), round(lat, 3)
             )
         else:

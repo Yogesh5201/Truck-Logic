@@ -32,13 +32,13 @@ driver on the 70-hour / 8-day cycle.
 --------------------------------------------------------------------------------
 Backend  : Python 3.12, Django 5, Django REST Framework, Shapely, Requests
 Frontend : React 18, TypeScript, Vite, Material UI (MUI), Zustand, Leaflet
-Mapping  : OpenRouteService (routing + geocoding) + OpenStreetMap tiles
+Mapping  : GraphHopper (routing + geocoding) + CARTO / OpenStreetMap tiles
 Deploy   : Backend -> Render (Docker) ; Frontend -> Vercel
 
 --------------------------------------------------------------------------------
 3. THE BIG IDEA (why this is not just a routing app)
 --------------------------------------------------------------------------------
-A normal routing API (OpenRouteService) gives you a SPATIAL answer: a line on a
+A normal routing API (GraphHopper) gives you a SPATIAL answer: a line on a
 map, a total distance, and an "optimal driving time." It knows nothing about
 the law.
 
@@ -107,8 +107,9 @@ WORKED EXAMPLE (the tricky one from the spec):
 --------------------------------------------------------------------------------
 - The trip has two legs: Leg 1 = current -> pickup (empty/deadhead),
   Leg 2 = pickup -> dropoff (loaded).
-- Each leg is a separate OpenRouteService "driving-hgv" (heavy goods vehicle)
-  request, so the route avoids low bridges and truck-restricted roads.
+- Each leg is a separate GraphHopper routing request, so the route follows
+  real roads. (The free tier uses the "car" profile; "truck"/HGV routing is
+  available on paid GraphHopper plans via GRAPHHOPPER_PROFILE.)
 - The two legs are stitched into one polyline ("RouteTrack") that also stores
   the cumulative distance at every point.
 - point_at(distance) linearly interpolates the [lon, lat] at any distance —
@@ -187,7 +188,7 @@ truck routing/
     manage.py
     requirements.txt
     Dockerfile              Container build for Render/Heroku/Fly
-    .env.example            Copy to .env and add your ORS key
+    .env.example            Copy to .env and add your GraphHopper key
     config/                 Django project (settings, urls, wsgi)
     trip_planner/
       views.py              Thin DRF endpoint
@@ -195,8 +196,8 @@ truck routing/
       constants.py          Every HOS number in one place
       urls.py
       services/
-        ors_client.py       ORS geocode + HGV routing + reverse-geocode (cached,
-                            with an offline mock fallback if no API key is set)
+        graphhopper_client.py  GraphHopper geocode + routing + reverse-geocode
+                            (cached, typed errors, offline mock fallback)
         geometry.py         RouteTrack + linear interpolation (framework-free)
         hos_engine.py       The HOS finite state machine (framework-free)
         simulator.py        Orchestration + response assembly + simplification
@@ -238,7 +239,7 @@ Prerequisites: Python 3.12+ and Node 18+ installed.
     #   macOS / Linux:  source .venv/bin/activate
     pip install -r requirements.txt
     copy .env.example .env         (Windows)   /   cp .env.example .env  (mac/linux)
-    # Open .env and paste your OpenRouteService key on the ORS_API_KEY= line.
+    # Open .env and paste your GraphHopper key on the GRAPHHOPPER_API_KEY= line.
     # (You CAN skip the key for now — the app runs with a built-in mock route.)
     python manage.py runserver 8000
 
@@ -256,17 +257,20 @@ Prerequisites: Python 3.12+ and Node 18+ installed.
     Open it in a browser, click a preset chip, and press "Generate".
 
 --------------------------------------------------------------------------------
-10. ADD YOUR OPENROUTESERVICE API KEY
+10. ADD YOUR GRAPHHOPPER API KEY
 --------------------------------------------------------------------------------
-1. Sign up (free) at:  https://openrouteservice.org/dev/#/signup
-2. Copy your API token.
+1. Sign up (free) at:  https://www.graphhopper.com/  (Dashboard -> API Keys)
+2. Copy your API key.
 3. Open  backend/.env  and set:
-        ORS_API_KEY=your-token-here
+        GRAPHHOPPER_API_KEY=your-key-here
 4. Restart the backend (Ctrl+C, then `python manage.py runserver 8000`).
 
-Now the app uses real HGV routing, real geocoding, and real city/state names
+Now the app uses real road routing, real geocoding, and real city/state names
 in the Remarks. Without the key, it still works using a straight-line mock so
 you are never blocked.
+
+   Profile note: GraphHopper's free tier supports car/bike/foot. The "truck"
+   profile needs a paid plan; set GRAPHHOPPER_PROFILE=truck if you have it.
 
 --------------------------------------------------------------------------------
 11. RUN THE TESTS
@@ -290,7 +294,7 @@ Frontend build check:
 3. Connect your GitHub repo. Render reads render.yaml automatically and creates
    a Docker web service named "truck-routing-api".
 4. In the service's "Environment" settings, set:
-        ORS_API_KEY           = your OpenRouteService key
+        GRAPHHOPPER_API_KEY   = your GraphHopper key
         CORS_ALLOWED_ORIGINS  = https://your-frontend.vercel.app
    (DJANGO_SECRET_KEY is auto-generated; DEBUG is already "False".)
 5. Click "Apply" / "Create". Wait for the build to finish (a few minutes).
@@ -337,9 +341,9 @@ Your real .env files are gitignored, so your API key is never committed.
 --------------------------------------------------------------------------------
 15. DEPLOYMENT CHECKLIST (in order)
 --------------------------------------------------------------------------------
-    [ ] Get an OpenRouteService API key
+    [ ] Get a GraphHopper API key
     [ ] Push repo to GitHub
-    [ ] Deploy backend to Render (Blueprint), set ORS_API_KEY
+    [ ] Deploy backend to Render (Blueprint), set GRAPHHOPPER_API_KEY
     [ ] Copy the Render backend URL
     [ ] Deploy frontend to Vercel, set VITE_API_BASE_URL to the Render URL
     [ ] Copy the Vercel frontend URL

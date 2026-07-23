@@ -3,7 +3,8 @@ Unit tests for the HOS temporal projection engine.
 
 These tests build synthetic straight-line routes with a controlled distance
 and driving duration, so we can assert the finite state machine injects the
-correct rests, breaks, fuel stops and cycle restarts — independent of ORS.
+correct rests, breaks, fuel stops and cycle restarts — independent of the
+routing provider.
 """
 
 from django.test import SimpleTestCase
@@ -22,7 +23,7 @@ def make_track(
     """Build a synthetic track with an *exact* distance and average speed.
 
     The engine measures driving distance from geometry (haversine per edge)
-    and time from the apportioned ORS duration, so we construct the
+    and time from the apportioned leg duration, so we construct the
     :class:`RouteTrack` directly with controlled ``edge_dist`` / ``edge_dur``
     rather than relying on real-world coordinates to yield a precise mileage.
 

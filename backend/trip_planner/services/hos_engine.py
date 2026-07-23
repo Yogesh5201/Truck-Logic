@@ -2,9 +2,9 @@
 FMCSA Hours-of-Service (HOS) temporal projection engine.
 
 This module contains the finite state machine that turns a purely *spatial*
-route (a polyline with distances and ORS-estimated driving durations) into a
-*temporal* timeline of duty-status events, injecting every mandatory rest,
-break, fuel and load-handling interruption at the correct moment.
+route (a polyline with distances and provider-estimated driving durations)
+into a *temporal* timeline of duty-status events, injecting every mandatory
+rest, break, fuel and load-handling interruption at the correct moment.
 
 The engine is deliberately framework-free (no Django / no HTTP) so it can be
 unit-tested directly.
@@ -235,7 +235,7 @@ class HOSSimulator:
         leg1_dist = pickup_dist
         leg2_dist = self.track.total_distance_m - pickup_dist
 
-        # Split the ORS total drive time across the two legs by distance.
+        # Split the total drive time across the two legs by distance.
         total_dist = self.track.total_distance_m or 1.0
         total_hours = self.track.total_drive_hours or (total_dist / (55 * C.METERS_PER_MILE))
         mph_mps = total_dist / total_hours  # metres per driving-hour

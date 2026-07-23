@@ -9,8 +9,10 @@ services:
     plan: free
     healthCheckPath: /api/v1/health/
     envVars:
-      - key: ORS_API_KEY
-        sync: false            # set your OpenRouteService key in the dashboard
+      - key: GRAPHHOPPER_API_KEY
+        sync: false            # set your GraphHopper key in the dashboard
+      - key: GRAPHHOPPER_PROFILE
+        value: "car"
       - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: DJANGO_DEBUG

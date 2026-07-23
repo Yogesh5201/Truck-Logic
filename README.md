@@ -19,7 +19,7 @@ Built with **Django + Django REST Framework** (backend) and
 - [The HOS State Machine (the core math)](#the-hos-state-machine-the-core-math)
 - [API Contract](#api-contract)
 - [Local Setup](#local-setup)
-- [Adding your OpenRouteService key](#adding-your-openrouteservice-key)
+- [Adding your GraphHopper key](#adding-your-graphhopper-key)
 - [Running Tests](#running-tests)
 - [Deployment](#deployment)
 - [Project Structure](#project-structure)
@@ -29,7 +29,7 @@ Built with **Django + Django REST Framework** (backend) and
 ## Architecture
 
 The system deliberately **decouples spatial routing from temporal
-compliance**. OpenRouteService returns a purely *spatial* path (a polyline
+compliance**. GraphHopper returns a purely *spatial* path (a polyline
 with distance + optimal-speed duration). The FMCSA Hours-of-Service (HOS)
 rules are a *temporal* constraint system. The backend's job is to walk the
 spatial path while advancing a set of regulatory clocks, **injecting**
@@ -38,7 +38,7 @@ mandatory rests / breaks / fuel stops at the exact moment a limit binds, and
 interpolation along the polyline.
 
 ```
- Address inputs ──▶ ORS geocode ──▶ ORS driving-hgv (2 legs)
+ Address inputs ──▶ GraphHopper geocode ──▶ GraphHopper route (2 legs)
                                           │
                                           ▼
                     RouteTrack (polyline + per-edge dist/time)
@@ -187,11 +187,11 @@ python -m venv .venv
 # Windows:  .venv\Scripts\activate
 # macOS/Linux:  source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env          # then add your ORS key (see below)
+cp .env.example .env          # then add your GraphHopper key (see below)
 python manage.py runserver 8000
 ```
-Backend runs at `http://localhost:8000`. **Without an ORS key it still runs**
-using a built-in straight-line mock so you can develop offline.
+Backend runs at `http://localhost:8000`. **Without a GraphHopper key it still
+runs** using a built-in straight-line mock so you can develop offline.
 
 ### 2. Frontend
 ```bash
@@ -204,16 +204,21 @@ Frontend runs at `http://localhost:5173`.
 
 ---
 
-## Adding your OpenRouteService key
+## Adding your GraphHopper key
 
-1. Get a free key at <https://openrouteservice.org/dev/#/signup>.
+1. Get a free key at <https://www.graphhopper.com/> (Dashboard → API Keys).
 2. Open `backend/.env` and paste it:
    ```
-   ORS_API_KEY=your-key-here
+   GRAPHHOPPER_API_KEY=your-key-here
    ```
-3. Restart the backend. It now uses real HGV routing, geocoding, and
+3. Restart the backend. It now uses real road routing, geocoding, and
    reverse-geocoded remarks. Responses are cached in-memory so repeated
    identical trips don't burn your rate limit.
+
+   > **Profile note:** GraphHopper's free tier supports the `car`, `bike`, and
+   > `foot` profiles; the `truck` profile requires a paid plan. The app routes
+   > with `car` by default — set `GRAPHHOPPER_PROFILE=truck` if your account
+   > has HGV access.
 
 ---
 
@@ -238,7 +243,7 @@ npm run build
 
 ### Backend → Render (Docker)
 - `render.yaml` is included as a blueprint. Push to GitHub, create a new
-  **Blueprint** on Render, and set `ORS_API_KEY` + `CORS_ALLOWED_ORIGINS`
+  **Blueprint** on Render, and set `GRAPHHOPPER_API_KEY` + `CORS_ALLOWED_ORIGINS`
   (your Vercel URL) in the dashboard.
 - Or deploy the `backend/Dockerfile` to any PaaS (Heroku, Fly.io, Railway).
 
@@ -259,23 +264,27 @@ backend/
     serializers.py        input validation (0–70h cycle, non-blank addresses)
     constants.py          all HOS numbers in one place
     services/
-      ors_client.py       ORS geocode + driving-hgv + reverse-geocode, cached
+      graphhopper_client.py  GraphHopper geocode + route + reverse-geocode,
+                             cached, with typed errors + offline mock fallback
       geometry.py         RouteTrack + linear interpolation (framework-free)
       hos_engine.py       the HOS finite state machine (framework-free)
       simulator.py        orchestration + response assembly + simplification
     tests/test_hos_engine.py
 frontend/
   src/
-    api/client.ts         typed fetch wrapper
+    api/client.ts         typed fetch wrapper + friendly error mapping
     store/tripStore.ts    Zustand global state
-    theme/theme.ts        MUI theme + shared status/event colors
+    theme/theme.ts        light/dark design system + shared status/event colors
+    theme/ColorModeProvider.tsx  persisted light/dark theme provider
     components/
-      TripForm.tsx        inputs + one-click presets
-      TripSummary.tsx     metric cards
-      TripMap.tsx         react-leaflet map, custom SVG markers, fitBounds
-      EldCanvas.tsx       HTML5 Canvas 24h grid + stepped line
-      EldLogViewer.tsx    day pagination + remarks table + totals
+      Header.tsx          brand header + dark-mode toggle
+      TripForm.tsx        inputs, validation, presets, toast on submit
+      TripSummary.tsx     animated metric cards
+      TripMap.tsx         react-leaflet map, animated markers, route draw
+      EldCanvas.tsx       HTML5 Canvas 24h grid + stepped line (theme-aware)
+      EldLogViewer.tsx    day pagination + remarks table + recap
       eldLogic.ts         midnight-splitting into per-day sheets
+      EmptyState / ErrorState / ResultsSkeleton / ToastProvider
 ```
 
 ---

@@ -1,8 +1,9 @@
 """
 Pure geometry helpers for the spatio-temporal projection.
 
-These functions have no ORS or Django dependency so they can be unit tested
-in isolation. Coordinates are always ``[lon, lat]`` to match GeoJSON order.
+These functions have no routing-provider or Django dependency so they can be
+unit tested in isolation. Coordinates are always ``[lon, lat]`` to match
+GeoJSON order.
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ class RouteTrack:
     The track is the concatenation of both trip legs. Each edge (segment
     between consecutive vertices) carries:
       * ``edge_dist[i]`` – metres, measured with the haversine formula
-      * ``edge_dur[i]``  – hours, apportioned from the ORS leg duration in
+      * ``edge_dur[i]``  – hours, apportioned from the leg's total duration in
         proportion to the edge's share of that leg's distance
 
     ``pickup_index`` is the vertex index at which leg 1 ends and leg 2 begins
@@ -85,12 +86,12 @@ class RouteTrack:
 
 
 def build_track_from_legs(leg1: dict, leg2: dict) -> RouteTrack:
-    """Combine two ORS legs into a single :class:`RouteTrack`.
+    """Combine two routing legs into a single :class:`RouteTrack`.
 
-    Each ``leg`` is the dict returned by ``ors_client.route_leg`` with keys
-    ``coordinates``, ``distance_m`` and ``duration_s``. Per-edge durations are
-    apportioned from the leg total by distance share so the average speed
-    profile matches ORS while remaining locally consistent.
+    Each ``leg`` is the dict returned by ``graphhopper_client.route_leg`` with
+    keys ``coordinates``, ``distance_m`` and ``duration_s``. Per-edge durations
+    are apportioned from the leg total by distance share so the average speed
+    profile matches the provider while remaining locally consistent.
     """
     coords: List[List[float]] = []
     edge_dist: List[float] = []

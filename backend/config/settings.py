@@ -37,9 +37,13 @@ ALLOWED_HOSTS = env.list(
 if DEBUG:
     ALLOWED_HOSTS = ["*"]
 
-# The OpenRouteService API key. Empty by default -> the ORS client falls back
-# to a bundled mock fixture so the app still runs end-to-end without a key.
-ORS_API_KEY = env("ORS_API_KEY", default="")
+# The GraphHopper API key. Empty by default -> the routing client falls back
+# to a bundled straight-line mock so the app still runs end-to-end without one.
+GRAPHHOPPER_API_KEY = env("GRAPHHOPPER_API_KEY", default="")
+
+# Routing profile. GraphHopper's free tier supports car/bike/foot; the "truck"
+# profile requires a paid plan. Override via env for HGV-enabled accounts.
+GRAPHHOPPER_PROFILE = env("GRAPHHOPPER_PROFILE", default="car")
 
 # ---------------------------------------------------------------------------
 # Applications

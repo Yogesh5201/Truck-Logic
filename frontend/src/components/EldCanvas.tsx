@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Box } from '@mui/material';
+import { Box, useTheme } from '@mui/material';
 import type { DaySegment } from './eldLogic';
 import { STATUS_ORDER } from './eldLogic';
 import { STATUS_COLORS } from '../theme/theme';
@@ -37,12 +37,27 @@ const PAD_BOTTOM = 20;
  */
 export default function EldCanvas({ segments, totals }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
+    // Theme-aware ink so the log is legible in both light and dark mode.
+    const pal = {
+      rowA: isDark ? '#1b1f27' : '#f8fafc',
+      rowB: isDark ? '#171a21' : '#ffffff',
+      tick: isDark ? '#3a4150' : '#cbd5e1',
+      line: isDark ? '#4b5568' : '#94a3b8',
+      labelStrong: isDark ? '#e6e8ee' : '#1e293b',
+      labelSoft: isDark ? '#9aa2b1' : '#334155',
+      value: isDark ? '#f1f5f9' : '#0f172a',
+      dutyLine: isDark ? '#e6e8ee' : '#0f172a',
+      accent: theme.palette.primary.main,
+    };
 
     // High-DPI crispness.
     const dpr = window.devicePixelRatio || 1;
@@ -65,12 +80,12 @@ export default function EldCanvas({ segments, totals }: Props) {
 
     // --- Alternating row shading ----------------------------------------
     STATUS_ORDER.forEach((_status, i) => {
-      ctx.fillStyle = i % 2 === 0 ? '#f8fafc' : '#ffffff';
+      ctx.fillStyle = i % 2 === 0 ? pal.rowA : pal.rowB;
       ctx.fillRect(PAD_LEFT, PAD_TOP + i * offsetY, gridW, offsetY);
     });
 
     // --- Hour header labels (Midnight | 1..11 | Noon | 1..11 | Midnight) -
-    ctx.fillStyle = '#334155';
+    ctx.fillStyle = pal.labelSoft;
     ctx.font = '600 9px Inter, sans-serif';
     ctx.textAlign = 'center';
     for (let h = 0; h <= 24; h++) {
@@ -86,7 +101,7 @@ export default function EldCanvas({ segments, totals }: Props) {
 
     // --- 15-minute tick subdivisions ------------------------------------
     // Ticks rise from each row's baseline, like the paper log.
-    ctx.strokeStyle = '#cbd5e1';
+    ctx.strokeStyle = pal.tick;
     ctx.lineWidth = 0.5;
     for (let h = 0; h < 24; h++) {
       for (let q = 1; q < 4; q++) {
@@ -105,7 +120,7 @@ export default function EldCanvas({ segments, totals }: Props) {
     }
 
     // --- Hour vertical lines (medium) -----------------------------------
-    ctx.strokeStyle = '#94a3b8';
+    ctx.strokeStyle = pal.line;
     ctx.lineWidth = 1;
     for (let h = 0; h <= 24; h++) {
       const x = xForHour(h);
@@ -116,7 +131,7 @@ export default function EldCanvas({ segments, totals }: Props) {
     }
 
     // --- Row separator lines + left labels ------------------------------
-    ctx.strokeStyle = '#94a3b8';
+    ctx.strokeStyle = pal.line;
     for (let i = 0; i <= 4; i++) {
       const y = PAD_TOP + i * offsetY;
       ctx.beginPath();
@@ -126,28 +141,28 @@ export default function EldCanvas({ segments, totals }: Props) {
     }
     ctx.textAlign = 'left';
     STATUS_ORDER.forEach((status, i) => {
-      ctx.fillStyle = '#1e293b';
+      ctx.fillStyle = pal.labelStrong;
       ctx.font = '600 11px Inter, sans-serif';
       ctx.fillText(STATUS_ROW_LABELS[status], 8, yForRowCenter(i) + 4);
     });
 
     // --- "Total Hours" column -------------------------------------------
     const totalsX = PAD_LEFT + gridW;
-    ctx.strokeStyle = '#94a3b8';
+    ctx.strokeStyle = pal.line;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(totalsX, PAD_TOP);
     ctx.lineTo(totalsX, PAD_TOP + gridH);
     ctx.stroke();
 
-    ctx.fillStyle = '#334155';
+    ctx.fillStyle = pal.labelSoft;
     ctx.font = '600 8px Inter, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('Total', totalsX + PAD_RIGHT / 2, PAD_TOP - 22);
     ctx.fillText('Hours', totalsX + PAD_RIGHT / 2, PAD_TOP - 13);
 
     STATUS_ORDER.forEach((status, i) => {
-      ctx.fillStyle = '#0f172a';
+      ctx.fillStyle = pal.value;
       ctx.font = '700 12px Inter, sans-serif';
       ctx.fillText(
         totals[status].toFixed(2),
@@ -158,12 +173,12 @@ export default function EldCanvas({ segments, totals }: Props) {
 
     // Grand total under the column.
     const grand = STATUS_ORDER.reduce((a, s) => a + totals[s], 0);
-    ctx.strokeStyle = '#94a3b8';
+    ctx.strokeStyle = pal.line;
     ctx.beginPath();
     ctx.moveTo(totalsX, PAD_TOP + gridH);
     ctx.lineTo(totalsX + PAD_RIGHT, PAD_TOP + gridH);
     ctx.stroke();
-    ctx.fillStyle = '#0f766e';
+    ctx.fillStyle = pal.accent;
     ctx.font = '700 11px Inter, sans-serif';
     ctx.fillText(grand.toFixed(1), totalsX + PAD_RIGHT / 2, PAD_TOP + gridH + 14);
 
@@ -171,8 +186,8 @@ export default function EldCanvas({ segments, totals }: Props) {
     if (segments.length > 0) {
       const rowIndexOf = (s: DutyStatus) => STATUS_ORDER.indexOf(s);
 
-      // Thick black base line (regulatory style).
-      ctx.strokeStyle = '#0f172a';
+      // Thick base line (regulatory style).
+      ctx.strokeStyle = pal.dutyLine;
       ctx.lineWidth = 3;
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
@@ -209,7 +224,7 @@ export default function EldCanvas({ segments, totals }: Props) {
         ctx.stroke();
       });
     }
-  }, [segments, totals]);
+  }, [segments, totals, isDark, theme.palette.primary.main]);
 
   return (
     <Box sx={{ width: '100%', overflowX: 'auto' }}>
