@@ -23,6 +23,8 @@ export interface DaySheet {
   }>;
   // Hours accumulated per status for this day's totals column.
   totals: Record<DutyStatus, number>;
+  totalMiles: number; // miles driven within this day
+  onDutyToday: number; // driving + on-duty hours this day (counts to cycle)
 }
 
 const STATUS_ORDER: DutyStatus[] = [
@@ -61,11 +63,14 @@ export function buildDaySheets(events: TimelineEvent[]): DaySheet[] {
       DRIVING: 0,
       ON_DUTY: 0,
     },
+    totalMiles: 0,
+    onDutyToday: 0,
   }));
 
   for (const ev of events) {
     let cursor = ev.start_hr;
     const end = ev.end_hr;
+    const evDuration = end - ev.start_hr || 1;
     let isFirstChunk = true;
 
     while (cursor < end - 1e-9) {
@@ -78,6 +83,7 @@ export function buildDaySheets(events: TimelineEvent[]): DaySheet[] {
       if (sheet) {
         const startWithin = cursor - dayStart;
         const endWithin = chunkEnd - dayStart;
+        const chunkHrs = endWithin - startWithin;
         sheet.segments.push({
           status: ev.status,
           startHr: startWithin,
@@ -87,7 +93,13 @@ export function buildDaySheets(events: TimelineEvent[]): DaySheet[] {
           locationLabel: ev.location_label,
           absoluteStartHr: ev.start_hr,
         });
-        sheet.totals[ev.status] += endWithin - startWithin;
+        sheet.totals[ev.status] += chunkHrs;
+
+        // Apportion this event's miles to the day by time share of the chunk.
+        sheet.totalMiles += ev.distance_mi * (chunkHrs / evDuration);
+        if (ev.status === 'DRIVING' || ev.status === 'ON_DUTY') {
+          sheet.onDutyToday += chunkHrs;
+        }
 
         // Only the first chunk of an event records a remark (the status change).
         if (isFirstChunk) {

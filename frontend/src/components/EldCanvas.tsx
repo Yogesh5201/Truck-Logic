@@ -7,31 +7,35 @@ import type { DutyStatus } from '../types';
 
 interface Props {
   segments: DaySegment[];
+  totals: Record<DutyStatus, number>;
 }
 
+// Official FMCSA row labels (top -> bottom).
 const STATUS_ROW_LABELS: Record<DutyStatus, string> = {
   OFF_DUTY: '1. Off Duty',
-  SLEEPER_BERTH: '2. Sleeper',
+  SLEEPER_BERTH: '2. Sleeper Berth',
   DRIVING: '3. Driving',
-  ON_DUTY: '4. On Duty',
+  ON_DUTY: '4. On Duty (not driving)',
 };
 
 // Canvas layout constants.
-const W = 900;
-const H = 240;
-const PAD_LEFT = 96; // room for status row labels
-const PAD_RIGHT = 44; // room for the totals column
-const PAD_TOP = 28; // room for hour numbers
-const PAD_BOTTOM = 18;
+const W = 940;
+const H = 260;
+const PAD_LEFT = 150; // room for status row labels
+const PAD_RIGHT = 66; // room for the "Total Hours" column
+const PAD_TOP = 34; // room for the hour header row
+const PAD_BOTTOM = 20;
 
 /**
- * Draws a single FMCSA 24-hour ELD grid with the stepped duty-status line.
- *
- * Time (0–24h) maps to X; the four duty statuses map to Y rows. Each segment
- * is a horizontal line at its status row; consecutive segments are joined by
- * a vertical riser, producing the characteristic stepped log line.
+ * Draws a single FMCSA "Driver's Daily Log" 24-hour grid with the stepped
+ * duty-status line — modeled on the official paper log:
+ *   • hour header from Midnight → Noon → Midnight
+ *   • four status rows with numbered labels on the left
+ *   • 15-minute tick subdivisions inside every hour column
+ *   • a "Total Hours" column on the right with each row's daily total
+ *   • the thick black stepped line with colored per-status overlay
  */
-export default function EldCanvas({ segments }: Props) {
+export default function EldCanvas({ segments, totals }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -47,7 +51,7 @@ export default function EldCanvas({ segments }: Props) {
     canvas.style.width = '100%';
     canvas.style.maxWidth = `${W}px`;
     canvas.style.height = 'auto';
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     ctx.clearRect(0, 0, W, H);
 
@@ -57,47 +61,62 @@ export default function EldCanvas({ segments }: Props) {
     const offsetY = gridH / 4;
 
     const xForHour = (hr: number) => PAD_LEFT + hr * offsetX;
-    const yForRow = (rowIdx: number) => PAD_TOP + rowIdx * offsetY + offsetY / 2;
+    const yForRowCenter = (rowIdx: number) => PAD_TOP + rowIdx * offsetY + offsetY / 2;
 
-    // --- Background rows (subtle alternating shading) --------------------
+    // --- Alternating row shading ----------------------------------------
     STATUS_ORDER.forEach((_status, i) => {
       ctx.fillStyle = i % 2 === 0 ? '#f8fafc' : '#ffffff';
       ctx.fillRect(PAD_LEFT, PAD_TOP + i * offsetY, gridW, offsetY);
     });
 
-    // --- Grid lines ------------------------------------------------------
-    // 15-minute subdivisions (light).
-    ctx.strokeStyle = '#e2e8f0';
+    // --- Hour header labels (Midnight | 1..11 | Noon | 1..11 | Midnight) -
+    ctx.fillStyle = '#334155';
+    ctx.font = '600 9px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    for (let h = 0; h <= 24; h++) {
+      const x = xForHour(h);
+      let label: string;
+      if (h === 0 || h === 24) label = 'Mid-\nnight';
+      else if (h === 12) label = 'Noon';
+      else label = `${h % 12}`;
+      // Support the two-line "Midnight" label.
+      const lines = label.split('\n');
+      lines.forEach((ln, li) => ctx.fillText(ln, x, PAD_TOP - 22 + li * 9));
+    }
+
+    // --- 15-minute tick subdivisions ------------------------------------
+    // Ticks rise from each row's baseline, like the paper log.
+    ctx.strokeStyle = '#cbd5e1';
     ctx.lineWidth = 0.5;
     for (let h = 0; h < 24; h++) {
       for (let q = 1; q < 4; q++) {
         const x = xForHour(h + q / 4);
-        ctx.beginPath();
-        ctx.moveTo(x, PAD_TOP);
-        ctx.lineTo(x, PAD_TOP + gridH);
-        ctx.stroke();
+        // Longer tick at the half hour, shorter at the quarters.
+        const tickFrac = q === 2 ? 0.5 : 0.3;
+        for (let r = 0; r < 4; r++) {
+          const rowTop = PAD_TOP + r * offsetY;
+          const rowBot = rowTop + offsetY;
+          ctx.beginPath();
+          ctx.moveTo(x, rowBot);
+          ctx.lineTo(x, rowBot - offsetY * tickFrac);
+          ctx.stroke();
+        }
       }
     }
 
-    // Hour lines (medium) + hour labels.
-    ctx.strokeStyle = '#cbd5e1';
+    // --- Hour vertical lines (medium) -----------------------------------
+    ctx.strokeStyle = '#94a3b8';
     ctx.lineWidth = 1;
-    ctx.fillStyle = '#64748b';
-    ctx.font = '10px Inter, sans-serif';
-    ctx.textAlign = 'center';
     for (let h = 0; h <= 24; h++) {
       const x = xForHour(h);
       ctx.beginPath();
       ctx.moveTo(x, PAD_TOP);
       ctx.lineTo(x, PAD_TOP + gridH);
       ctx.stroke();
-      const label = h === 24 ? 'M' : h === 0 ? 'M' : h === 12 ? 'N' : `${h % 12 || 12}`;
-      ctx.fillText(label, x, PAD_TOP - 10);
     }
 
-    // Row separator lines (medium) + row labels.
-    ctx.strokeStyle = '#cbd5e1';
-    ctx.textAlign = 'left';
+    // --- Row separator lines + left labels ------------------------------
+    ctx.strokeStyle = '#94a3b8';
     for (let i = 0; i <= 4; i++) {
       const y = PAD_TOP + i * offsetY;
       ctx.beginPath();
@@ -105,11 +124,48 @@ export default function EldCanvas({ segments }: Props) {
       ctx.lineTo(PAD_LEFT + gridW, y);
       ctx.stroke();
     }
+    ctx.textAlign = 'left';
     STATUS_ORDER.forEach((status, i) => {
-      ctx.fillStyle = '#334155';
+      ctx.fillStyle = '#1e293b';
       ctx.font = '600 11px Inter, sans-serif';
-      ctx.fillText(STATUS_ROW_LABELS[status], 8, PAD_TOP + i * offsetY + offsetY / 2 + 4);
+      ctx.fillText(STATUS_ROW_LABELS[status], 8, yForRowCenter(i) + 4);
     });
+
+    // --- "Total Hours" column -------------------------------------------
+    const totalsX = PAD_LEFT + gridW;
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(totalsX, PAD_TOP);
+    ctx.lineTo(totalsX, PAD_TOP + gridH);
+    ctx.stroke();
+
+    ctx.fillStyle = '#334155';
+    ctx.font = '600 8px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Total', totalsX + PAD_RIGHT / 2, PAD_TOP - 22);
+    ctx.fillText('Hours', totalsX + PAD_RIGHT / 2, PAD_TOP - 13);
+
+    STATUS_ORDER.forEach((status, i) => {
+      ctx.fillStyle = '#0f172a';
+      ctx.font = '700 12px Inter, sans-serif';
+      ctx.fillText(
+        totals[status].toFixed(2),
+        totalsX + PAD_RIGHT / 2,
+        yForRowCenter(i) + 4,
+      );
+    });
+
+    // Grand total under the column.
+    const grand = STATUS_ORDER.reduce((a, s) => a + totals[s], 0);
+    ctx.strokeStyle = '#94a3b8';
+    ctx.beginPath();
+    ctx.moveTo(totalsX, PAD_TOP + gridH);
+    ctx.lineTo(totalsX + PAD_RIGHT, PAD_TOP + gridH);
+    ctx.stroke();
+    ctx.fillStyle = '#0f766e';
+    ctx.font = '700 11px Inter, sans-serif';
+    ctx.fillText(grand.toFixed(1), totalsX + PAD_RIGHT / 2, PAD_TOP + gridH + 14);
 
     // --- Duty status stepped line ---------------------------------------
     if (segments.length > 0) {
@@ -119,11 +175,12 @@ export default function EldCanvas({ segments }: Props) {
       ctx.strokeStyle = '#0f172a';
       ctx.lineWidth = 3;
       ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
       ctx.beginPath();
 
       let prevY: number | null = null;
       segments.forEach((seg) => {
-        const y = yForRow(rowIndexOf(seg.status));
+        const y = yForRowCenter(rowIndexOf(seg.status));
         const xStart = xForHour(seg.startHr);
         const xEnd = xForHour(seg.endHr);
 
@@ -143,7 +200,7 @@ export default function EldCanvas({ segments }: Props) {
 
       // Colored overlay per status segment for readability.
       segments.forEach((seg) => {
-        const y = yForRow(rowIndexOf(seg.status));
+        const y = yForRowCenter(rowIndexOf(seg.status));
         ctx.strokeStyle = STATUS_COLORS[seg.status];
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -152,7 +209,7 @@ export default function EldCanvas({ segments }: Props) {
         ctx.stroke();
       });
     }
-  }, [segments]);
+  }, [segments, totals]);
 
   return (
     <Box sx={{ width: '100%', overflowX: 'auto' }}>

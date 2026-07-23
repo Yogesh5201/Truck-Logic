@@ -1,0 +1,368 @@
+================================================================================
+  TRUCKLOGIC — HOS-COMPLIANT TRUCK ROUTING & ELD LOG GENERATOR
+  Complete Project Overview + Deployment Guide
+================================================================================
+
+This file explains the whole project in plain language: what it does, how it is
+built, how every Hours-of-Service (HOS) rule is implemented, the exact request/
+response flow, and step-by-step instructions to run it locally and deploy it
+live (backend on Render, frontend on Vercel).
+
+--------------------------------------------------------------------------------
+1. WHAT THIS APP DOES
+--------------------------------------------------------------------------------
+You enter four things:
+    1. Current location   (e.g. "Chicago, IL")
+    2. Pickup location    (e.g. "Kansas City, MO")
+    3. Dropoff location   (e.g. "Dallas, TX")
+    4. Current cycle used (hours already worked in the 70h/8-day cycle)
+
+The app returns two outputs:
+    A. An interactive MAP of the truck route with markers for the start,
+       pickup, dropoff, fuel stops, and mandatory rest breaks.
+    B. FMCSA DRIVER'S DAILY LOG sheets — the official 24-hour grid drawn on an
+       HTML5 canvas, one sheet per day, with the stepped duty-status line, a
+       "Total Hours" column, a Remarks table, and a 70h/8-day recap.
+
+Everything obeys the FMCSA Hours-of-Service rules for a property-carrying
+driver on the 70-hour / 8-day cycle.
+
+--------------------------------------------------------------------------------
+2. TECH STACK
+--------------------------------------------------------------------------------
+Backend  : Python 3.12, Django 5, Django REST Framework, Shapely, Requests
+Frontend : React 18, TypeScript, Vite, Material UI (MUI), Zustand, Leaflet
+Mapping  : OpenRouteService (routing + geocoding) + OpenStreetMap tiles
+Deploy   : Backend -> Render (Docker) ; Frontend -> Vercel
+
+--------------------------------------------------------------------------------
+3. THE BIG IDEA (why this is not just a routing app)
+--------------------------------------------------------------------------------
+A normal routing API (OpenRouteService) gives you a SPATIAL answer: a line on a
+map, a total distance, and an "optimal driving time." It knows nothing about
+the law.
+
+Truck drivers are bound by TEMPORAL rules: you can only drive 11 hours, only be
+on duty 14 hours, must break for 30 minutes after 8 hours of driving, must stop
+after 70 on-duty hours in 8 days, etc.
+
+So the core of this project is a "temporal projection engine":
+    - It walks along the spatial route step by step.
+    - It advances a set of regulatory clocks as it goes.
+    - The moment a clock hits its limit, it PAUSES the truck, INJECTS the
+      required rest/break/fuel event into the timeline, and uses linear
+      interpolation to figure out the exact lat/lon on the route where that
+      pause happens (so it can drop a map marker there).
+    - The final result is a flat, chronological list of "duty status events"
+      that drives both the map markers and the ELD log drawing.
+
+--------------------------------------------------------------------------------
+4. HOURS-OF-SERVICE RULES IMPLEMENTED  (backend/trip_planner/services/hos_engine.py)
+--------------------------------------------------------------------------------
+Five clocks are tracked, each reset at a different point:
+
+    CLOCK               LIMIT                    RESET BY
+    -----------------   ----------------------   -------------------------
+    drive_since_rest    11 h driving             10h reset, 34h restart
+    window_since_rest   14 h on-duty window      10h reset, 34h restart
+    drive_since_break   8 h driving before break 30-min break, 10h, 34h
+    cycle_used          70 h on-duty / 8 days     34h restart only
+    dist_since_fuel     1,000 miles              fuel stop
+
+Available cycle at the start:
+    C_avail = 70 - current_cycle_used
+
+Every DRIVING hour AND every ON-DUTY (not driving) hour is subtracted from the
+cycle. When the cycle reaches 70, a 34-hour restart is injected and the cycle
+resets to 0 (70 available again).
+
+Fixed events always added:
+    - 15 min pre-trip inspection  (On Duty)  at the very start
+    - 1 hour loading              (On Duty)  at the pickup
+    - 1 hour unloading            (On Duty)  at the dropoff
+    - 30 min fueling              (On Duty)  every 1,000 miles
+
+How a single driving step decides how far it can go:
+    allow = minimum of (
+        11 - drive_since_rest,
+        14 - window_since_rest,
+        8  - drive_since_break,
+        70 - cycle_used,
+        distance-to-next-fuel / speed,
+        distance-left-on-this-leg / speed
+    )
+When "allow" reaches zero, the engine services the exhausted clock in priority
+order and then keeps driving:
+    cycle restart (34h) > daily reset (10h) > 30-min break > fuel stop
+
+WORKED EXAMPLE (the tricky one from the spec):
+    current_cycle_used = 68  ->  only 2 hours available.
+    The truck drives ~2 hours (minus the 0.25h pre-trip that also counts),
+    stops, takes a full 34-hour restart, resets to 70 available, and continues.
+    This exact case is covered by a unit test:
+        test_cycle_almost_exhausted_forces_34h_restart
+
+--------------------------------------------------------------------------------
+5. HOW THE MAP IS PRODUCED
+--------------------------------------------------------------------------------
+- The trip has two legs: Leg 1 = current -> pickup (empty/deadhead),
+  Leg 2 = pickup -> dropoff (loaded).
+- Each leg is a separate OpenRouteService "driving-hgv" (heavy goods vehicle)
+  request, so the route avoids low bridges and truck-restricted roads.
+- The two legs are stitched into one polyline ("RouteTrack") that also stores
+  the cumulative distance at every point.
+- point_at(distance) linearly interpolates the [lon, lat] at any distance —
+  this is how a rest stop triggered at, say, 605 miles becomes a real map pin.
+- Long routes are simplified with the Douglas-Peucker algorithm (Shapely) so
+  the map payload stays small and fast.
+- The frontend (react-leaflet) draws the OpenStreetMap tiles, the route line,
+  and custom teardrop SVG markers (Start / Pickup / Dropoff / Fuel / Rest).
+- map.fitBounds() auto-zooms so the whole route is visible.
+
+--------------------------------------------------------------------------------
+6. HOW THE ELD DAILY LOG IS DRAWN  (frontend/src/components/EldCanvas.tsx)
+--------------------------------------------------------------------------------
+The log matches the official FMCSA "Driver's Daily Log" paper form:
+    - Header block: Total Miles Today, Day X of N, Carrier, From, To.
+    - A 24-hour grid: X axis = time (Midnight -> Noon -> Midnight), with each
+      hour split into four 15-minute ticks.
+    - Y axis = four duty rows, labeled exactly like the form:
+          1. Off Duty
+          2. Sleeper Berth
+          3. Driving
+          4. On Duty (not driving)
+    - The duty status is a continuous STEPPED line: horizontal while a status
+      holds, vertical when the status changes.
+    - A "Total Hours" column on the right shows each row's total for the day,
+      plus a grand total (should equal 24).
+    - Below the grid: a Remarks table listing the time, new status, city/state
+      location (reverse-geocoded), and a note for every status change.
+    - A Recap panel shows the 70h/8-day math: on-duty today, total last 8 days,
+      and hours available tomorrow.
+
+MULTI-DAY LOGIC (frontend/src/components/eldLogic.ts):
+    A trip longer than 24 hours needs multiple sheets. The flat event list is
+    split into 24-hour chunks. An event that crosses midnight (e.g. a 10-hour
+    sleeper period from hour 20 to hour 30) is cut at the boundary: sheet 1
+    draws 20:00 -> 24:00, sheet 2 draws 00:00 -> 06:00. Each day is a tab.
+
+--------------------------------------------------------------------------------
+7. API CONTRACT
+--------------------------------------------------------------------------------
+Endpoint:  POST  /api/v1/simulate-trip/
+
+Request body (JSON):
+    {
+      "current_location": "Chicago, IL",
+      "pickup_location":  "Kansas City, MO",
+      "dropoff_location": "Dallas, TX",
+      "current_cycle_used": 10.0
+    }
+
+Response body (JSON), three main sections:
+    trip_summary     -> totals: distance, duration, driving hours, counts of
+                        fuel stops / resets / restarts, number of log sheets,
+                        cycle available at start.
+    route_geometry   -> a GeoJSON FeatureCollection (LineString) for the map.
+    timeline_events  -> the chronological list of duty-status blocks; each has
+                        event_type, status, start_hr, end_hr, duration_hrs,
+                        start_coord, end_coord, distance_mi, location_label.
+    waypoints        -> resolved coordinates + labels for current/pickup/dropoff.
+
+Health check:  GET /api/v1/health/  ->  {"status": "ok"}
+
+Validation: addresses must be non-blank; current_cycle_used must be 0-70.
+Bad input returns HTTP 400 with a field-level error message.
+
+--------------------------------------------------------------------------------
+8. PROJECT STRUCTURE
+--------------------------------------------------------------------------------
+truck routing/
+  README.md                 Full markdown docs
+  overview.txt              This file
+  render.yaml               Render deploy blueprint (backend)
+  .gitignore
+
+  backend/
+    manage.py
+    requirements.txt
+    Dockerfile              Container build for Render/Heroku/Fly
+    .env.example            Copy to .env and add your ORS key
+    config/                 Django project (settings, urls, wsgi)
+    trip_planner/
+      views.py              Thin DRF endpoint
+      serializers.py        Input validation
+      constants.py          Every HOS number in one place
+      urls.py
+      services/
+        ors_client.py       ORS geocode + HGV routing + reverse-geocode (cached,
+                            with an offline mock fallback if no API key is set)
+        geometry.py         RouteTrack + linear interpolation (framework-free)
+        hos_engine.py       The HOS finite state machine (framework-free)
+        simulator.py        Orchestration + response assembly + simplification
+      tests/
+        test_hos_engine.py  9 unit tests (limits, restart edge case, fuel, etc.)
+
+  frontend/
+    package.json
+    vite.config.ts
+    vercel.json             SPA rewrite config for Vercel
+    .env.example            Copy to .env ; set VITE_API_BASE_URL
+    index.html
+    src/
+      main.tsx              App bootstrap (theme + fonts + leaflet css)
+      App.tsx               Layout: form on the left, results on the right
+      types.ts              TypeScript mirror of the API response
+      api/client.ts         Typed fetch wrapper with error handling
+      store/tripStore.ts    Zustand global state (loading/result/error)
+      theme/theme.ts        MUI theme + shared status/event colors
+      components/
+        TripForm.tsx        Inputs + one-click demo presets
+        TripSummary.tsx     Metric cards
+        TripMap.tsx         react-leaflet map, custom markers, fitBounds
+        EldCanvas.tsx       The FMCSA 24-hour grid + stepped line (canvas)
+        EldLogViewer.tsx    Header, day tabs, remarks table, recap
+        eldLogic.ts         Splits the timeline into per-day sheets
+        format.ts           Time/label formatting helpers
+
+--------------------------------------------------------------------------------
+9. RUN IT LOCALLY  (step by step)
+--------------------------------------------------------------------------------
+Prerequisites: Python 3.12+ and Node 18+ installed.
+
+--- BACKEND ---
+    cd backend
+    python -m venv .venv
+    # Activate the virtual environment:
+    #   Windows:        .venv\Scripts\activate
+    #   macOS / Linux:  source .venv/bin/activate
+    pip install -r requirements.txt
+    copy .env.example .env         (Windows)   /   cp .env.example .env  (mac/linux)
+    # Open .env and paste your OpenRouteService key on the ORS_API_KEY= line.
+    # (You CAN skip the key for now — the app runs with a built-in mock route.)
+    python manage.py runserver 8000
+
+    Backend is now at:  http://localhost:8000
+    Test it:            http://localhost:8000/api/v1/health/
+
+--- FRONTEND (in a second terminal) ---
+    cd frontend
+    npm install
+    copy .env.example .env         (Windows)   /   cp .env.example .env  (mac/linux)
+    # .env default already points at http://localhost:8000/api/v1
+    npm run dev
+
+    Frontend is now at: http://localhost:5173
+    Open it in a browser, click a preset chip, and press "Generate".
+
+--------------------------------------------------------------------------------
+10. ADD YOUR OPENROUTESERVICE API KEY
+--------------------------------------------------------------------------------
+1. Sign up (free) at:  https://openrouteservice.org/dev/#/signup
+2. Copy your API token.
+3. Open  backend/.env  and set:
+        ORS_API_KEY=your-token-here
+4. Restart the backend (Ctrl+C, then `python manage.py runserver 8000`).
+
+Now the app uses real HGV routing, real geocoding, and real city/state names
+in the Remarks. Without the key, it still works using a straight-line mock so
+you are never blocked.
+
+--------------------------------------------------------------------------------
+11. RUN THE TESTS
+--------------------------------------------------------------------------------
+    cd backend
+    python manage.py test
+
+Expected: "Ran 9 tests ... OK". These verify the 11h/14h/8h limits, the 70h
+cycle with the 34-hour restart edge case, fuel-stop injection, and that the
+timeline has no gaps.
+
+Frontend build check:
+    cd frontend
+    npm run build
+
+--------------------------------------------------------------------------------
+12. DEPLOY THE BACKEND TO RENDER  (Docker)
+--------------------------------------------------------------------------------
+1. Push this whole repo to GitHub (see section 14).
+2. Go to https://render.com  ->  sign in  ->  "New +"  ->  "Blueprint".
+3. Connect your GitHub repo. Render reads render.yaml automatically and creates
+   a Docker web service named "truck-routing-api".
+4. In the service's "Environment" settings, set:
+        ORS_API_KEY           = your OpenRouteService key
+        CORS_ALLOWED_ORIGINS  = https://your-frontend.vercel.app
+   (DJANGO_SECRET_KEY is auto-generated; DEBUG is already "False".)
+5. Click "Apply" / "Create". Wait for the build to finish (a few minutes).
+6. Your API is live at:  https://truck-routing-api.onrender.com
+   Verify:               https://truck-routing-api.onrender.com/api/v1/health/
+
+   NOTE: Render's free tier sleeps after inactivity; the first request after a
+   nap can take ~30-50 seconds to wake. That is normal.
+
+Alternative (no Blueprint): create a "Web Service", point it at the repo, set
+Root Directory to "backend", Runtime = Docker, and add the same env vars.
+
+--------------------------------------------------------------------------------
+13. DEPLOY THE FRONTEND TO VERCEL
+--------------------------------------------------------------------------------
+1. Go to https://vercel.com  ->  "Add New..."  ->  "Project".
+2. Import your GitHub repo.
+3. IMPORTANT settings:
+        Root Directory      = frontend
+        Framework Preset    = Vite   (auto-detected)
+        Build Command       = npm run build   (default)
+        Output Directory    = dist            (default)
+4. Add an Environment Variable:
+        VITE_API_BASE_URL = https://truck-routing-api.onrender.com/api/v1
+   (use YOUR Render backend URL, and keep the /api/v1 suffix)
+5. Click "Deploy". After ~1 minute you get a live URL like:
+        https://your-frontend.vercel.app
+6. Go BACK to Render and make sure CORS_ALLOWED_ORIGINS is set to this exact
+   Vercel URL (no trailing slash), then save so the backend accepts the
+   browser requests.
+
+--------------------------------------------------------------------------------
+14. PUSH TO GITHUB
+--------------------------------------------------------------------------------
+The repo is already initialized and committed locally. To publish it:
+
+    # create an empty repo on github.com first (no README), then:
+    git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
+    git branch -M main
+    git push -u origin main
+
+Your real .env files are gitignored, so your API key is never committed.
+
+--------------------------------------------------------------------------------
+15. DEPLOYMENT CHECKLIST (in order)
+--------------------------------------------------------------------------------
+    [ ] Get an OpenRouteService API key
+    [ ] Push repo to GitHub
+    [ ] Deploy backend to Render (Blueprint), set ORS_API_KEY
+    [ ] Copy the Render backend URL
+    [ ] Deploy frontend to Vercel, set VITE_API_BASE_URL to the Render URL
+    [ ] Copy the Vercel frontend URL
+    [ ] Set CORS_ALLOWED_ORIGINS on Render to the Vercel URL, save
+    [ ] Open the Vercel URL, run a preset trip, confirm map + logs render
+    [ ] Record the 3-5 minute Loom walkthrough
+
+--------------------------------------------------------------------------------
+16. LOOM WALKTHROUGH — SUGGESTED OUTLINE (3-5 min)
+--------------------------------------------------------------------------------
+    0:00  Intro: what the app does (inputs -> route + ELD logs).
+    0:30  Live demo: run the "Cross-country (LA -> NY)" preset. Show the map
+          (markers, route), then the multi-day ELD logs (tabs, stepped line,
+          remarks, recap).
+    1:30  Run the "Cycle nearly full (68 h)" preset to show the 34-hour restart
+          appearing in the logs — the standout HOS edge case.
+    2:15  Architecture: explain the spatial->temporal idea. Open hos_engine.py
+          and show the five clocks and the "allow = min(...)" driving step.
+    3:15  Show geometry.py point_at() — how a time-based rest becomes a map pin.
+    3:45  Frontend: EldCanvas.tsx drawing the grid + stepped line; note the
+          midnight-split pagination in eldLogic.ts.
+    4:30  Wrap up: tests passing, deployed on Render + Vercel.
+
+================================================================================
+  End of overview. See README.md for the same content in markdown form.
+================================================================================
