@@ -184,6 +184,74 @@ def reverse_geocode(lon: float, lat: float) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Autocomplete (typeahead suggestions for the address inputs)
+# ---------------------------------------------------------------------------
+def _format_hit_label(hit: dict) -> str:
+    """Build a readable "Name, City, State, Country" label from a geocode hit.
+
+    Deduplicates repeated parts (e.g. when name == city) and drops blanks so
+    the suggestion reads cleanly, like a Google-Maps style result.
+    """
+    parts = [
+        hit.get("name"),
+        hit.get("city"),
+        hit.get("state"),
+        hit.get("country"),
+    ]
+    seen: list[str] = []
+    for p in parts:
+        if p and p not in seen:
+            seen.append(p)
+    return ", ".join(seen)
+
+
+@lru_cache(maxsize=512)
+def suggest(query: str, limit: int = 6) -> tuple:
+    """Return up to ``limit`` autocomplete suggestions for a partial query.
+
+    Each suggestion is a dict ``{"label", "lon", "lat"}``. Cached per (query,
+    limit) so repeated keystrokes for the same prefix are free. Returns an empty
+    tuple on any failure or when no key is configured — autocomplete is a
+    convenience, never a hard dependency.
+
+    The return type is a tuple (not a list) so it is hashable for lru_cache.
+    """
+    query = query.strip()
+    if len(query) < 2 or not _has_key():
+        return tuple()
+
+    try:
+        resp = requests.get(
+            GEOCODE_URL,
+            params={
+                "q": query,
+                "limit": limit,
+                "autocomplete": "true",
+                "locale": "en",
+                "key": settings.GRAPHHOPPER_API_KEY,
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        if not resp.ok:
+            return tuple()
+        hits = resp.json().get("hits", [])
+    except requests.RequestException:
+        return tuple()
+
+    results = []
+    seen_labels = set()
+    for h in hits:
+        pt = h.get("point") or {}
+        label = _format_hit_label(h)
+        if label and label not in seen_labels and "lat" in pt and "lng" in pt:
+            seen_labels.add(label)
+            results.append(
+                {"label": label, "lon": float(pt["lng"]), "lat": float(pt["lat"])}
+            )
+    return tuple(results)
+
+
+# ---------------------------------------------------------------------------
 # Directions
 # ---------------------------------------------------------------------------
 def route_leg(start: tuple, end: tuple) -> dict:

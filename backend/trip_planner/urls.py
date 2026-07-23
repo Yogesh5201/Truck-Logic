@@ -6,5 +6,6 @@ from . import views
 
 urlpatterns = [
     path("health/", views.health, name="health"),
+    path("autocomplete/", views.autocomplete, name="autocomplete"),
     path("simulate-trip/", views.simulate_trip, name="simulate-trip"),
 ]

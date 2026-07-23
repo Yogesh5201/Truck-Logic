@@ -9,6 +9,68 @@ response flow, and step-by-step instructions to run it locally and deploy it
 live (backend on Render, frontend on Vercel).
 
 --------------------------------------------------------------------------------
+0. WHAT IS THIS WEBSITE FOR?  (plain-English explanation)
+--------------------------------------------------------------------------------
+THE SHORT VERSION
+    It is a trip planner for truck drivers that also fills out their legally
+    required logbook automatically.
+
+THE PROBLEM IT SOLVES
+    In the United States, a commercial truck driver is NOT allowed to just
+    drive from A to B without stopping. Federal law (the FMCSA "Hours of
+    Service" rules) strictly limits how long they can drive and work:
+        - They can drive at most 11 hours before a long rest.
+        - Their workday window is capped at 14 hours.
+        - They must take a 30-minute break after 8 hours of driving.
+        - They can only work 70 hours total across any 8 days.
+    On top of that, trucks must stop for fuel roughly every 1,000 miles, and
+    loading/unloading freight takes about an hour at each end.
+
+    Drivers must also keep a "daily log" — an official grid sheet showing, hour
+    by hour, whether they were Driving, On Duty, resting in the Sleeper Berth,
+    or Off Duty. Historically this was drawn by hand every single day.
+
+    So a simple question like "I'm in Chicago, I need to pick up in Kansas City
+    and deliver in Dallas, and I've already worked 10 hours this week — when and
+    where do I legally have to stop, and what do my logs look like?" is actually
+    a hard scheduling puzzle.
+
+WHAT THE WEBSITE DOES ABOUT IT
+    You type in four simple things:
+        1. Where you are now
+        2. Where you pick up the load
+        3. Where you drop it off
+        4. How many hours you've already worked this cycle
+    ...and the app instantly does the whole puzzle for you. It:
+        - Finds the real driving route on actual roads (via GraphHopper).
+        - Walks that route hour by hour and inserts every legally required
+          break, 10-hour rest, 34-hour restart, and fuel stop at the correct
+          moment and the correct place on the map.
+        - Draws the official daily log sheets, already filled in, one per day.
+
+WHO WOULD USE IT
+    - Truck drivers planning a trip and wanting to stay legal.
+    - Dispatchers / fleet managers estimating realistic delivery times
+      (real ETA including mandatory rest, not just raw drive time).
+    - Anyone learning how the Hours-of-Service rules actually play out on a
+      real route.
+
+WHY IT MATTERS
+    Breaking these rules leads to fines, failed inspections, and unsafe, tired
+    driving. This tool turns a confusing legal calculation into a clear map and
+    a set of ready-to-read log sheets in a couple of seconds.
+
+A QUICK EXAMPLE TO TRY
+    Open the app, click the preset "Cycle nearly full (68 h)", and press
+    Generate. Because the driver has almost no hours left, the app shows them
+    driving only about 2 hours, then being forced into a 34-hour restart before
+    continuing — exactly what the law requires. That is the kind of answer this
+    website exists to give.
+
+NOTE: This is a simulation for planning and evaluation. It is not certified ELD
+compliance software and should not be used as the official record of duty.
+
+--------------------------------------------------------------------------------
 1. WHAT THIS APP DOES
 --------------------------------------------------------------------------------
 You enter four things:
@@ -16,6 +78,12 @@ You enter four things:
     2. Pickup location    (e.g. "Kansas City, MO")
     3. Dropoff location   (e.g. "Dallas, TX")
     4. Current cycle used (hours already worked in the 70h/8-day cycle)
+
+The three location boxes have Google-Maps-style AUTOCOMPLETE: as you type, a
+dropdown of matching places appears (type "dehr" and you'll see "Dehradun";
+type "chic" and you'll see "Chicago"). Pick one, or just type a full address.
+Suggestions come from GraphHopper, proxied through the backend so the API key
+is never exposed to the browser.
 
 The app returns two outputs:
     A. An interactive MAP of the truck route with markers for the start,
@@ -171,6 +239,12 @@ Response body (JSON), three main sections:
     waypoints        -> resolved coordinates + labels for current/pickup/dropoff.
 
 Health check:  GET /api/v1/health/  ->  {"status": "ok"}
+
+Autocomplete:  GET /api/v1/autocomplete/?q=<partial>  ->
+    {"suggestions": [{"label": "Chicago, Illinois, United States",
+                      "lon": -87.62, "lat": 41.87}, ...]}
+    Proxies GraphHopper geocoding (autocomplete=true) so the key stays on the
+    server. Returns an empty list on any hiccup — it never blocks typing.
 
 Validation: addresses must be non-blank; current_cycle_used must be 0-70.
 Bad input returns HTTP 400 with a field-level error message.

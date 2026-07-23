@@ -20,6 +20,7 @@ import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import { useTripStore } from '../store/tripStore';
 import { useToast } from './ToastProvider';
+import LocationAutocomplete from './LocationAutocomplete';
 
 interface FieldErrors {
   current_location?: string;
@@ -148,59 +149,29 @@ export default function TripForm() {
 
         <Box component="form" onSubmit={handleSubmit} noValidate>
           <Stack spacing={2}>
-            <TextField
-              fullWidth
-              size="small"
+            <LocationAutocomplete
               label="Current location"
-              placeholder="e.g. Chicago, IL"
+              placeholder="Start typing a city…"
               value={form.current_location}
-              onChange={(e) => update('current_location', e.target.value)}
-              error={!!errors.current_location}
-              helperText={errors.current_location}
-              sx={fieldSx}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <TripOriginRoundedIcon sx={{ fontSize: 18, color: '#10b981' }} />
-                  </InputAdornment>
-                ),
-              }}
+              onChange={(v) => update('current_location', v)}
+              error={errors.current_location}
+              startIcon={<TripOriginRoundedIcon sx={{ fontSize: 18, color: '#10b981' }} />}
             />
-            <TextField
-              fullWidth
-              size="small"
+            <LocationAutocomplete
               label="Pickup location"
-              placeholder="e.g. Kansas City, MO"
+              placeholder="Start typing a city…"
               value={form.pickup_location}
-              onChange={(e) => update('pickup_location', e.target.value)}
-              error={!!errors.pickup_location}
-              helperText={errors.pickup_location}
-              sx={fieldSx}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Inventory2RoundedIcon sx={{ fontSize: 18, color: '#f59e0b' }} />
-                  </InputAdornment>
-                ),
-              }}
+              onChange={(v) => update('pickup_location', v)}
+              error={errors.pickup_location}
+              startIcon={<Inventory2RoundedIcon sx={{ fontSize: 18, color: '#f59e0b' }} />}
             />
-            <TextField
-              fullWidth
-              size="small"
+            <LocationAutocomplete
               label="Dropoff location"
-              placeholder="e.g. Dallas, TX"
+              placeholder="Start typing a city…"
               value={form.dropoff_location}
-              onChange={(e) => update('dropoff_location', e.target.value)}
-              error={!!errors.dropoff_location}
-              helperText={errors.dropoff_location}
-              sx={fieldSx}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <PlaceRoundedIcon sx={{ fontSize: 18, color: '#ef4444' }} />
-                  </InputAdornment>
-                ),
-              }}
+              onChange={(v) => update('dropoff_location', v)}
+              error={errors.dropoff_location}
+              startIcon={<PlaceRoundedIcon sx={{ fontSize: 18, color: '#ef4444' }} />}
             />
             <TextField
               fullWidth

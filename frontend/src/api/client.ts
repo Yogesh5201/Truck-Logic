@@ -81,3 +81,37 @@ function humanizeField(key: string): string {
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+/** A single address autocomplete suggestion. */
+export interface Suggestion {
+  label: string;
+  lon: number;
+  lat: number;
+}
+
+/**
+ * Fetch address autocomplete suggestions for a partial query.
+ *
+ * Proxied through the backend (which holds the GraphHopper key). Autocomplete
+ * is a convenience, so any failure resolves to an empty list rather than
+ * throwing — the user can always type a full address. An optional AbortSignal
+ * lets callers cancel stale in-flight requests as the user keeps typing.
+ */
+export async function fetchSuggestions(
+  query: string,
+  signal?: AbortSignal,
+): Promise<Suggestion[]> {
+  if (query.trim().length < 2) return [];
+  try {
+    const resp = await fetch(
+      `${API_BASE}/autocomplete/?q=${encodeURIComponent(query)}`,
+      { signal },
+    );
+    if (!resp.ok) return [];
+    const body = (await resp.json()) as { suggestions?: Suggestion[] };
+    return body.suggestions ?? [];
+  } catch {
+    // Includes AbortError (stale request) and network hiccups.
+    return [];
+  }
+}

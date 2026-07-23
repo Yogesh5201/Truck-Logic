@@ -14,6 +14,7 @@ from rest_framework.response import Response
 
 from .serializers import SimulateTripSerializer
 from .services import simulator
+from .services import graphhopper_client as routing
 from .services.graphhopper_client import GraphHopperError
 
 
@@ -21,6 +22,19 @@ from .services.graphhopper_client import GraphHopperError
 def health(request):
     """Simple liveness probe for deployment platforms."""
     return Response({"status": "ok"})
+
+
+@api_view(["GET"])
+def autocomplete(request):
+    """GET /api/v1/autocomplete/?q=... — address typeahead suggestions.
+
+    Proxies GraphHopper geocoding so the API key stays server-side. Always
+    returns 200 with a (possibly empty) list; autocomplete is a convenience,
+    so upstream hiccups degrade gracefully rather than surfacing an error.
+    """
+    query = request.query_params.get("q", "")
+    suggestions = routing.suggest(query.strip())
+    return Response({"suggestions": list(suggestions)})
 
 
 @api_view(["POST"])
