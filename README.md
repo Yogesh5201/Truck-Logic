@@ -278,7 +278,7 @@ frontend/
     theme/ColorModeProvider.tsx  persisted light/dark theme provider
     components/
       Header.tsx          brand header + dark-mode toggle
-      TripForm.tsx        inputs, validation, presets, toast on submit
+      TripForm.tsx        inputs w/ address autocomplete, validation, toast
       TripSummary.tsx     animated metric cards
       TripMap.tsx         react-leaflet map, animated markers, route draw
       EldCanvas.tsx       HTML5 Canvas 24h grid + stepped line (theme-aware)

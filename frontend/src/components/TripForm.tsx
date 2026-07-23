@@ -8,15 +8,12 @@ import {
   Typography,
   Stack,
   InputAdornment,
-  Divider,
   CircularProgress,
-  useTheme,
 } from '@mui/material';
 import TripOriginRoundedIcon from '@mui/icons-material/TripOriginRounded';
 import Inventory2RoundedIcon from '@mui/icons-material/Inventory2Rounded';
 import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
 import ScheduleRoundedIcon from '@mui/icons-material/ScheduleRounded';
-import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import { useTripStore } from '../store/tripStore';
 import { useToast } from './ToastProvider';
@@ -36,39 +33,6 @@ interface FormState {
   current_cycle_used: string;
 }
 
-const PRESETS: Array<{ label: string; hint: string; value: FormState }> = [
-  {
-    label: 'Chicago → Dallas',
-    hint: 'Regional · 1 rest',
-    value: {
-      current_location: 'Chicago, IL',
-      pickup_location: 'Kansas City, MO',
-      dropoff_location: 'Dallas, TX',
-      current_cycle_used: '10',
-    },
-  },
-  {
-    label: 'LA → New York',
-    hint: 'Cross-country · multi-day',
-    value: {
-      current_location: 'Los Angeles, CA',
-      pickup_location: 'Denver, CO',
-      dropoff_location: 'New York, NY',
-      current_cycle_used: '8',
-    },
-  },
-  {
-    label: 'Cycle nearly full',
-    hint: '68h used · 34h restart',
-    value: {
-      current_location: 'Houston, TX',
-      pickup_location: 'Oklahoma City, OK',
-      dropoff_location: 'Denver, CO',
-      current_cycle_used: '68',
-    },
-  },
-];
-
 const EMPTY: FormState = {
   current_location: '',
   pickup_location: '',
@@ -77,7 +41,6 @@ const EMPTY: FormState = {
 };
 
 export default function TripForm() {
-  const theme = useTheme();
   const { runSimulation, loading } = useTripStore();
   const { notify } = useToast();
 
@@ -119,11 +82,6 @@ export default function TripForm() {
     }
   };
 
-  const applyPreset = (value: FormState) => {
-    setForm(value);
-    setErrors({});
-  };
-
   const fieldSx = {
     '& .MuiOutlinedInput-root': { bgcolor: 'background.paper' },
   } as const;
@@ -151,7 +109,7 @@ export default function TripForm() {
           <Stack spacing={2}>
             <LocationAutocomplete
               label="Current location"
-              placeholder="Start typing a city…"
+              placeholder="e.g. Chicago, IL"
               value={form.current_location}
               onChange={(v) => update('current_location', v)}
               error={errors.current_location}
@@ -159,7 +117,7 @@ export default function TripForm() {
             />
             <LocationAutocomplete
               label="Pickup location"
-              placeholder="Start typing a city…"
+              placeholder="e.g. Kansas City, MO"
               value={form.pickup_location}
               onChange={(v) => update('pickup_location', v)}
               error={errors.pickup_location}
@@ -167,7 +125,7 @@ export default function TripForm() {
             />
             <LocationAutocomplete
               label="Dropoff location"
-              placeholder="Start typing a city…"
+              placeholder="e.g. Dallas, TX"
               value={form.dropoff_location}
               onChange={(v) => update('dropoff_location', v)}
               error={errors.dropoff_location}
@@ -213,59 +171,6 @@ export default function TripForm() {
             {loading ? 'Generating…' : 'Generate route & logs'}
           </Button>
         </Box>
-
-        <Divider sx={{ my: 3 }}>
-          <Typography variant="overline" color="text.secondary">
-            or try a preset
-          </Typography>
-        </Divider>
-
-        <Stack spacing={1}>
-          {PRESETS.map((p) => (
-            <Box
-              key={p.label}
-              role="button"
-              tabIndex={0}
-              onClick={() => applyPreset(p.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  applyPreset(p.value);
-                }
-              }}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1.5,
-                p: 1.25,
-                borderRadius: 2,
-                border: `1px solid ${theme.palette.divider}`,
-                cursor: 'pointer',
-                transition: 'all 150ms ease',
-                '&:hover': {
-                  borderColor: 'primary.main',
-                  bgcolor: theme.palette.mode === 'dark' ? '#6366f114' : '#6366f10a',
-                  transform: 'translateX(2px)',
-                },
-                '&:focus-visible': {
-                  outline: `2px solid ${theme.palette.primary.main}`,
-                  outlineOffset: 2,
-                },
-              }}
-            >
-              <AutoAwesomeRoundedIcon sx={{ fontSize: 18, color: 'primary.main' }} />
-              <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                <Typography variant="body2" fontWeight={600} noWrap>
-                  {p.label}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" noWrap>
-                  {p.hint}
-                </Typography>
-              </Box>
-              <ArrowForwardRoundedIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
-            </Box>
-          ))}
-        </Stack>
       </CardContent>
     </Card>
   );

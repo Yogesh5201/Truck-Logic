@@ -61,11 +61,13 @@ WHY IT MATTERS
     a set of ready-to-read log sheets in a couple of seconds.
 
 A QUICK EXAMPLE TO TRY
-    Open the app, click the preset "Cycle nearly full (68 h)", and press
-    Generate. Because the driver has almost no hours left, the app shows them
-    driving only about 2 hours, then being forced into a 34-hour restart before
-    continuing — exactly what the law requires. That is the kind of answer this
-    website exists to give.
+    Open the app and enter a trip where the driver has almost no hours left —
+    for example Current "Houston, TX", Pickup "Oklahoma City, OK", Dropoff
+    "Denver, CO", and Current cycle used = 68 — then press Generate. Because the
+    driver has almost no hours left, the app shows them driving only about 2
+    hours, then being forced into a 34-hour restart before continuing — exactly
+    what the law requires. That is the kind of answer this website exists to
+    give.
 
 NOTE: This is a simulation for planning and evaluation. It is not certified ELD
 compliance software and should not be used as the official record of duty.
@@ -292,7 +294,7 @@ truck routing/
       store/tripStore.ts    Zustand global state (loading/result/error)
       theme/theme.ts        MUI theme + shared status/event colors
       components/
-        TripForm.tsx        Inputs + one-click demo presets
+        TripForm.tsx        Inputs with address autocomplete + validation
         TripSummary.tsx     Metric cards
         TripMap.tsx         react-leaflet map, custom markers, fitBounds
         EldCanvas.tsx       The FMCSA 24-hour grid + stepped line (canvas)
@@ -328,7 +330,8 @@ Prerequisites: Python 3.12+ and Node 18+ installed.
     npm run dev
 
     Frontend is now at: http://localhost:5173
-    Open it in a browser, click a preset chip, and press "Generate".
+    Open it in a browser, type the three locations (autocomplete will help),
+    set the cycle hours, and press "Generate".
 
 --------------------------------------------------------------------------------
 10. ADD YOUR GRAPHHOPPER API KEY
@@ -422,17 +425,18 @@ Your real .env files are gitignored, so your API key is never committed.
     [ ] Deploy frontend to Vercel, set VITE_API_BASE_URL to the Render URL
     [ ] Copy the Vercel frontend URL
     [ ] Set CORS_ALLOWED_ORIGINS on Render to the Vercel URL, save
-    [ ] Open the Vercel URL, run a preset trip, confirm map + logs render
+    [ ] Open the Vercel URL, run a sample trip, confirm map + logs render
     [ ] Record the 3-5 minute Loom walkthrough
 
 --------------------------------------------------------------------------------
 16. LOOM WALKTHROUGH — QUICK OUTLINE (3-5 min)
 --------------------------------------------------------------------------------
     0:00  Intro: what the app does (inputs -> route + ELD logs).
-    0:30  Live demo: run the "LA -> NY" preset. Show the map (markers, route),
-          then the multi-day ELD logs (tabs, stepped line, remarks, recap).
-    1:30  Run the "Cycle nearly full (68 h)" preset to show the 34-hour restart
-          appearing in the logs — the standout HOS edge case.
+    0:30  Live demo: enter LA -> Denver -> New York (autocomplete helps). Show
+          the map (markers, route), then the multi-day ELD logs (tabs, stepped
+          line, remarks, recap).
+    1:30  Enter a near-full cycle trip (cycle used = 68) to show the 34-hour
+          restart appearing in the logs — the standout HOS edge case.
     2:15  Architecture: explain the spatial->temporal idea. Open hos_engine.py
           and show the five clocks and the "allow = min(...)" driving step.
     3:15  Show geometry.py point_at() — how a time-based rest becomes a map pin.
@@ -465,11 +469,14 @@ GraphHopper API for real road routing and geocoding."
 ................................................................................
 [0:25-1:05]  LIVE DEMO — THE HAPPY PATH
 ................................................................................
-[ACTION] Click the "LA -> New York" preset chip, then "Generate route & logs".
-         While the skeleton loaders show, keep talking.
+[ACTION] Type into the three location fields — Current "Los Angeles, CA",
+         Pickup "Denver, CO", Dropoff "New York, NY" (pick from the autocomplete
+         dropdown as it appears), set cycle used to 8, then "Generate route &
+         logs". While the skeleton loaders show, keep talking.
 
-"Let me run a real trip. I'll use the cross-country preset — Los Angeles, pick
-up in Denver, drop off in New York. Notice while it loads we show skeleton
+"Let me run a real trip. As I type each location, notice the address
+autocomplete — I'm starting in Los Angeles, picking up in Denver, and dropping
+off in New York. While it loads we show skeleton
 placeholders that match the final layout, not just a spinner — so it feels fast
 and intentional.
 
@@ -521,7 +528,8 @@ one sheet at midnight and continues on the next from hour zero."
 ................................................................................
 [2:25-2:55]  THE STANDOUT EDGE CASE — 34-HOUR RESTART
 ................................................................................
-[ACTION] Click the "Cycle nearly full (68 h)" preset, then Generate.
+[ACTION] Enter a short trip (e.g. Houston -> Oklahoma City -> Denver) and set
+         Current cycle used to 68, then Generate.
 
 "Now the case that really tests the logic. This driver starts with 68 of their
 70 cycle hours already used — so only 2 hours of legal driving left. Watch what
@@ -602,7 +610,9 @@ RECORDING CHECKLIST
     [ ] Editor open with hos_engine.py, graphhopper_client.py, geometry.py,
         EldCanvas.tsx, eldLogic.ts in tabs
     [ ] Start in light mode; toggle dark mode once on camera
-    [ ] Run BOTH presets: "LA -> NY" (multi-day) and "Cycle nearly full (68h)"
+    [ ] Run BOTH trips: LA -> Denver -> NY (multi-day) and a short trip with
+        cycle used = 68 (34-hour restart)
+    [ ] Show the address autocomplete dropdown at least once while typing
     [ ] Keep it 3-5 minutes; the architecture section is the first to trim
     [ ] Mention GraphHopper by name at least once (integration requirement)
 
