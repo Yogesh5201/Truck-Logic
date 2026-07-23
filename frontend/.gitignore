@@ -4,3 +4,8 @@ dist/
 .DS_Store
 *.local
 .vite/
+
+# TS build artifacts (emitted by `tsc -b`)
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
