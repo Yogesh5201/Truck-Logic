@@ -373,10 +373,14 @@ Frontend build check:
 4. In the service's "Environment" settings, set:
         GRAPHHOPPER_API_KEY   = your GraphHopper key
         CORS_ALLOWED_ORIGINS  = https://your-frontend.vercel.app
-   (DJANGO_SECRET_KEY is auto-generated; DEBUG is already "False".)
+   (DJANGO_SECRET_KEY is auto-generated; DJANGO_DEBUG is already "False" and
+   DJANGO_ALLOWED_HOSTS is already ".onrender.com" from render.yaml.)
+   You don't know the Vercel URL yet — that's fine. Put a placeholder now and
+   come back to fix CORS_ALLOWED_ORIGINS after section 13 (step 6).
 5. Click "Apply" / "Create". Wait for the build to finish (a few minutes).
 6. Your API is live at:  https://truck-routing-api.onrender.com
    Verify:               https://truck-routing-api.onrender.com/api/v1/health/
+   (Should return {"status": "ok"}.)
 
    NOTE: Render's free tier sleeps after inactivity; the first request after a
    nap can take ~30-50 seconds to wake. That is normal.
@@ -404,29 +408,67 @@ Root Directory to "backend", Runtime = Docker, and add the same env vars.
    browser requests.
 
 --------------------------------------------------------------------------------
-14. PUSH TO GITHUB
+14. PUSH TO GITHUB  (the link you give the client)
 --------------------------------------------------------------------------------
-The repo is already initialized and committed locally. To publish it:
+The repository is already initialized and fully committed locally. Your real
+.env files and the .claude/ folder are gitignored, and the API key has been
+kept out of the entire git history — so it is safe to publish.
 
-    # create an empty repo on github.com first (no README), then:
-    git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
-    git branch -M main
+STEP 1 — (optional but recommended) confirm nothing secret is tracked:
+    cd "path/to/truck routing"
+    git ls-files | grep -E "\.env$"        # should print NOTHING
+    git grep -i "your-api-key-value"         # should print NOTHING
+
+STEP 2 — create an EMPTY repo on GitHub:
+    - Go to https://github.com/new
+    - Repository name: e.g.  truck-routing-eld
+    - Choose Public (so the client can open the link) or Private (then add the
+      client as a collaborator under Settings -> Collaborators).
+    - IMPORTANT: do NOT check "Add a README", ".gitignore", or "license" —
+      the repo must be empty so the first push isn't rejected.
+    - Click "Create repository".
+
+STEP 3 — connect and push. Copy the HTTPS URL GitHub shows you, then run:
+    cd "path/to/truck routing"
+    git remote add origin https://github.com/YOUR_USERNAME/truck-routing-eld.git
+    git branch -M main          # renames the local 'master' branch to 'main'
     git push -u origin main
 
-Your real .env files are gitignored, so your API key is never committed.
+    (If GitHub asks you to log in, use your username and a Personal Access
+    Token as the password — create one at
+    https://github.com/settings/tokens with the "repo" scope. Or install the
+    GitHub CLI: `gh auth login`, then push.)
+
+STEP 4 — verify on github.com: refresh the repo page. You should see the
+    README render, plus the backend/ and frontend/ folders. Open a couple of
+    files to confirm they're there.
+
+STEP 5 — THE LINK TO SEND THE CLIENT:
+        https://github.com/YOUR_USERNAME/truck-routing-eld
+
+    If the repo is Private, either invite the client as a collaborator, or make
+    it Public for grading (Settings -> General -> Danger Zone -> Change
+    visibility). A private repo with no access will look empty to them.
+
+Pushing later commits (after the first push):
+    git add -A
+    git commit -m "your message"
+    git push
 
 --------------------------------------------------------------------------------
 15. DEPLOYMENT CHECKLIST (in order)
 --------------------------------------------------------------------------------
     [ ] Get a GraphHopper API key
-    [ ] Push repo to GitHub
+    [ ] Push repo to GitHub (section 14) and confirm the link opens
+    [ ] Make sure the client can access it (Public, or add as collaborator)
     [ ] Deploy backend to Render (Blueprint), set GRAPHHOPPER_API_KEY
-    [ ] Copy the Render backend URL
+    [ ] Copy the Render backend URL; verify /api/v1/health/ returns ok
     [ ] Deploy frontend to Vercel, set VITE_API_BASE_URL to the Render URL
     [ ] Copy the Vercel frontend URL
-    [ ] Set CORS_ALLOWED_ORIGINS on Render to the Vercel URL, save
+    [ ] Set CORS_ALLOWED_ORIGINS on Render to the Vercel URL, save (redeploys)
     [ ] Open the Vercel URL, run a sample trip, confirm map + logs render
     [ ] Record the 3-5 minute Loom walkthrough
+    [ ] Send the client: GitHub link + live Vercel link + Loom link
 
 --------------------------------------------------------------------------------
 16. LOOM WALKTHROUGH — QUICK OUTLINE (3-5 min)
