@@ -352,20 +352,185 @@ Your real .env files are gitignored, so your API key is never committed.
     [ ] Record the 3-5 minute Loom walkthrough
 
 --------------------------------------------------------------------------------
-16. LOOM WALKTHROUGH — SUGGESTED OUTLINE (3-5 min)
+16. LOOM WALKTHROUGH — QUICK OUTLINE (3-5 min)
 --------------------------------------------------------------------------------
     0:00  Intro: what the app does (inputs -> route + ELD logs).
-    0:30  Live demo: run the "Cross-country (LA -> NY)" preset. Show the map
-          (markers, route), then the multi-day ELD logs (tabs, stepped line,
-          remarks, recap).
+    0:30  Live demo: run the "LA -> NY" preset. Show the map (markers, route),
+          then the multi-day ELD logs (tabs, stepped line, remarks, recap).
     1:30  Run the "Cycle nearly full (68 h)" preset to show the 34-hour restart
           appearing in the logs — the standout HOS edge case.
     2:15  Architecture: explain the spatial->temporal idea. Open hos_engine.py
           and show the five clocks and the "allow = min(...)" driving step.
     3:15  Show geometry.py point_at() — how a time-based rest becomes a map pin.
-    3:45  Frontend: EldCanvas.tsx drawing the grid + stepped line; note the
-          midnight-split pagination in eldLogic.ts.
-    4:30  Wrap up: tests passing, deployed on Render + Vercel.
+    3:45  Frontend: EldCanvas.tsx grid + stepped line; midnight-split pagination.
+    4:30  Wrap up: GraphHopper integration, tests passing, deployed.
+
+--------------------------------------------------------------------------------
+17. LOOM WALKTHROUGH — FULL WORD-FOR-WORD SCRIPT
+--------------------------------------------------------------------------------
+Tips before you record:
+  - Have the app open at the Vercel (or localhost:5173) URL, plus your editor.
+  - Set the theme to light mode to start (you'll toggle dark mode on camera).
+  - Total spoken time is ~4.5 min at a natural pace. The [ACTION] lines tell you
+    what to click; the plain text is what to say. Trim any section if you run long.
+
+................................................................................
+[0:00-0:25]  INTRO — WHAT & WHY
+................................................................................
+[ACTION] Show the app's landing screen (empty state with the form on the left).
+
+"Hi — this is TruckLogic, a full-stack app that turns a trucking trip into a
+fully Hours-of-Service compliant plan. You give it four things — where you are,
+where you pick up, where you drop off, and how many hours you've already worked
+in your cycle — and it returns two things: an interactive route map with every
+required stop, and FMCSA driver's daily log sheets, drawn automatically.
+
+It's a Django REST backend, a React and TypeScript frontend, and it uses the
+GraphHopper API for real road routing and geocoding."
+
+................................................................................
+[0:25-1:05]  LIVE DEMO — THE HAPPY PATH
+................................................................................
+[ACTION] Click the "LA -> New York" preset chip, then "Generate route & logs".
+         While the skeleton loaders show, keep talking.
+
+"Let me run a real trip. I'll use the cross-country preset — Los Angeles, pick
+up in Denver, drop off in New York. Notice while it loads we show skeleton
+placeholders that match the final layout, not just a spinner — so it feels fast
+and intentional.
+
+[ACTION] Results appear. Point at the six metric cards along the top.
+
+And here's the result. Up top, a summary: total distance — around 2,800 miles
+of real road routing from GraphHopper — total trip time including every rest,
+the cycle hours still available, and counts of rest stops, fuel stops, and how
+many daily log sheets this trip needs. Here it's five days."
+
+................................................................................
+[1:05-1:45]  THE MAP
+................................................................................
+[ACTION] Move the cursor over the map. Hover a couple of markers to open popups.
+
+"The map auto-fits to the whole route. The line animates in as it draws. Every
+stop is a distinct, color-coded marker — green for the start, amber for pickup,
+red for dropoff, violet for fuel, indigo for the mandatory rest breaks. The
+start and dropoff pins have a subtle animated pulse so your eye finds them
+first. Hovering any marker gives an elegant popup with the stop type, the time
+into the trip, and the reverse-geocoded city and state — that location text
+also comes from GraphHopper."
+
+[ACTION] Scroll down to the Daily Log section. Click through the day tabs.
+
+"Below that are the ELD logs. Because this trip spans five days, the app
+generates five separate 24-hour sheets — one per tab."
+
+................................................................................
+[1:45-2:25]  THE ELD LOG SHEET (the hard part)
+................................................................................
+[ACTION] Point at the grid: the hour header, the four rows, the stepped line,
+         then the Total Hours column, then the Remarks table and Recap panel.
+
+"This is drawn on an HTML5 canvas to match the real FMCSA paper log exactly.
+The horizontal axis is the 24-hour day — Midnight, Noon, Midnight — with every
+hour split into 15-minute ticks. The four rows are the duty statuses: Off Duty,
+Sleeper Berth, Driving, and On Duty not driving. The thick line steps between
+rows every time the status changes — that's the driver's day.
+
+On the right is the Total Hours column, and it always sums to 24. Below the
+grid, the Remarks table lists every duty change with its time and location, and
+this Recap panel does the 70-hour, 8-day math: hours on duty today, total over
+the last 8 days, and hours available tomorrow.
+
+One nice detail: a rest that crosses midnight is split automatically — it ends
+one sheet at midnight and continues on the next from hour zero."
+
+................................................................................
+[2:25-2:55]  THE STANDOUT EDGE CASE — 34-HOUR RESTART
+................................................................................
+[ACTION] Click the "Cycle nearly full (68 h)" preset, then Generate.
+
+"Now the case that really tests the logic. This driver starts with 68 of their
+70 cycle hours already used — so only 2 hours of legal driving left. Watch what
+happens.
+
+[ACTION] When results load, open the log and point to the 34-hour block.
+
+The engine lets them drive just under two hours, then it's forced to stop and
+take a full 34-hour restart to reset the cycle — you can see that long block
+right here in the log — and only then does driving resume. That single behavior
+is the difference between a toy and a correct HOS simulation."
+
+................................................................................
+[2:55-3:00]  POLISH — DARK MODE
+................................................................................
+[ACTION] Click the sun/moon toggle in the header.
+
+"Quick note on polish — full light and dark mode. The map tiles, the canvas
+log, every component adapts, and the choice is remembered."
+
+................................................................................
+[3:00-3:50]  ARCHITECTURE — SPATIAL TO TEMPORAL
+................................................................................
+[ACTION] Switch to your editor. Open backend/trip_planner/services/hos_engine.py.
+
+"Here's the core idea. GraphHopper gives us a purely spatial answer — a line
+and a distance. But the law is about time. So this HOS engine walks along the
+route and runs five clocks at once: the 11-hour driving limit, the 14-hour
+window, the 8-hour-till-break rule, the 70-hour cycle, and distance since the
+last fuel stop.
+
+[ACTION] Scroll to the "allow = min(...)" block in _drive_distance.
+
+The whole thing lives in this one expression. Each driving step advances only
+as far as the nearest binding limit — the minimum across all the clocks. When a
+limit hits zero, the engine injects the right rest — a 34-hour restart, a
+10-hour reset, a 30-minute break, or a fuel stop — and then keeps going."
+
+[ACTION] Open services/graphhopper_client.py; scroll to the typed error classes.
+
+"The GraphHopper client wraps geocoding and routing, caches responses so we
+never hit the rate limit twice, and has typed errors for an invalid key, rate
+limiting, network failures, and no-route-found — each mapped to a friendly
+message in the UI."
+
+................................................................................
+[3:50-4:20]  ARCHITECTURE — PROJECTING TIME BACK ONTO SPACE
+................................................................................
+[ACTION] Open services/geometry.py; point to point_at().
+
+"The other clever bit is here. When a rest triggers at, say, 605 miles in, this
+point_at function linearly interpolates the exact latitude and longitude along
+the route polyline — that's how a time-based event becomes a real pin on the
+map. The backend does all of this and returns one flat list of events that
+drives both the map and the logs — the browser never re-computes anything."
+
+[ACTION] Open frontend/src/components/EldCanvas.tsx briefly, then eldLogic.ts.
+
+"On the frontend, this canvas file draws the grid and the stepped line, and
+eldLogic.ts is what splits the timeline into per-day sheets and handles the
+midnight crossings."
+
+................................................................................
+[4:20-4:45]  WRAP UP
+................................................................................
+[ACTION] Optionally show the terminal with `python manage.py test` passing.
+
+"To wrap up: ORS was fully replaced with GraphHopper with no loss of
+functionality, the HOS engine is covered by unit tests including that 34-hour
+restart case, the frontend builds clean and code-splits the heavy map and log
+components, and it's deployed with the backend on Render and the frontend on
+Vercel. Thanks for watching."
+
+................................................................................
+RECORDING CHECKLIST
+................................................................................
+    [ ] App open at your live URL, backend awake (hit it once so Render wakes)
+    [ ] Editor open with hos_engine.py, graphhopper_client.py, geometry.py,
+        EldCanvas.tsx, eldLogic.ts in tabs
+    [ ] Start in light mode; toggle dark mode once on camera
+    [ ] Run BOTH presets: "LA -> NY" (multi-day) and "Cycle nearly full (68h)"
+    [ ] Keep it 3-5 minutes; the architecture section is the first to trim
+    [ ] Mention GraphHopper by name at least once (integration requirement)
 
 ================================================================================
   End of overview. See README.md for the same content in markdown form.
