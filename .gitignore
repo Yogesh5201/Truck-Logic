@@ -16,3 +16,6 @@ frontend/dist/
 
 # Environment secrets (never commit real keys)
 .env
+
+# Claude Code local settings (may contain machine-specific paths / secrets)
+.claude/
